@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+langchain
+langchain-openai
+langchain-google-genai
+langgraph
+openai
+google-generativeai
+pydantic
+python-dotenv
+aiohttp
+httpx
+pymongo
+motor
