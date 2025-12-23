@@ -97,7 +97,46 @@ L'agent demande une information manquante (ex: téléphone pour le paiement).
 
 ---
 
-## 2. Health Check
+---
+
+## 2. Chat Streaming
+Point d'entrée pour recevoir la réponse de l'agent en temps réel via Server-Sent Events (SSE). Utile pour améliorer la réactivité perçue par l'utilisateur.
+
+### Endpoint
+*   **URL** : `/chat/stream`
+*   **Méthode** : `POST`
+*   **Content-Type** : `application/json`
+*   **Accept** : `text/event-stream`
+
+### Request Body
+Identique au point d'entrée `/chat`.
+
+### Response (SSE)
+Le serveur renvoie un flux d'événements (stream) au format `data: { ... }\n\n`.
+
+#### Types d'événements :
+
+| Type | Description |
+| :--- | :--- |
+| `content` | Un fragment de texte du message de l'assistant. |
+| `tool_start` | Indique que l'agent commence l'exécution d'un outil (ex: `product_search_tool`). |
+| `error` | Envoyé en cas d'erreur durant la génération. |
+| `[DONE]` | Signal de fin de stream (indique que la connexion peut être fermée). |
+
+**Exemple de flux :**
+```text
+data: {"type": "content", "value": "Bonjour ! "}
+
+data: {"type": "tool_start", "tool": "product_search_tool"}
+
+data: {"type": "content", "value": "Je cherche les meilleurs articles pour vous..."}
+
+data: [DONE]
+```
+
+---
+
+## 3. Health Check
 Vérifier l'état de santé de l'API.
 
 ### Endpoint
@@ -115,7 +154,7 @@ Vérifier l'état de santé de l'API.
 
 ---
 
-## 3. Modèles de Données
+## 4. Modèles de Données
 
 ### Objet Product
 | Champ | Type | Description |

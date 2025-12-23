@@ -58,6 +58,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Middleware pour mesurer la latence
+import time
+from fastapi import Request
+
+@app.middleware("http")
+async def add_process_time_header(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    response.headers["X-Process-Time"] = str(process_time)
+    print(f"⏱️ Latence pour {request.url.path}: {process_time:.4f}s")
+    return response
+
 # ============================================================================
 # Modèles Pydantic
 # ============================================================================
@@ -154,7 +167,10 @@ async def chat_endpoint(request: ChatRequest) -> ChatResponse:
         config = {"configurable": {"thread_id": request.session_id or "default"}}
         
         # Exécuter l'agent
+        start_agent = time.time()
         result = await agent_executor.ainvoke({"messages": messages}, config=config)
+        agent_duration = time.time() - start_agent
+        print(f"🤖 Agent execution took: {agent_duration:.4f}s")
         
         # Extraire la réponse du dernier message AI
         agent_output = ""
@@ -285,19 +301,51 @@ async def chat_endpoint(request: ChatRequest) -> ChatResponse:
         )
 
 
-"""@app.post("/chat/stream")
+from fastapi.responses import StreamingResponse
+import asyncio
+
+@app.post("/chat/stream")
 async def chat_stream_endpoint(request: ChatRequest):
+    """
+    Endpoint pour le streaming de réponses via Server-Sent Events (SSE)
+    """
+    if not request.message or len(request.message.strip()) == 0:
+        raise HTTPException(status_code=400, detail="Le message ne peut pas être vide")
 
-Endpoint pour le streaming de réponses
-Utile pour les interfaces en temps réel
+    messages = [HumanMessage(content=request.message)]
+    config = {"configurable": {"thread_id": request.session_id or "default"}}
 
-TODO: Implémenter le streaming avec SSE (Server-Sent Events)
+    async def event_generator():
+        try:
+            # On utilise astream pour récupérer les chunks en temps réel
+            # Note: Avec create_react_agent, on reçoit des updates d'état
+            async for event in agent_executor.astream_events(
+                {"messages": messages}, 
+                config=config,
+                version="v2"
+            ):
+                kind = event["event"]
+                
+                # On stream les tokens générés par le LLM (content)
+                if kind == "on_chat_model_stream":
+                    content = event["data"]["chunk"].content
+                    if content:
+                        yield f"data: {json.dumps({'type': 'content', 'value': content})}\n\n"
+                
+                # On peut aussi streamer les débuts d'appels d'outils pour l'UX
+                elif kind == "on_tool_start":
+                    yield f"data: {json.dumps({'type': 'tool_start', 'tool': event['name']})}\n\n"
+                    
+                elif kind == "on_tool_end":
+                    # On pourrait envoyer les résultats partiels ici
+                    pass
 
-return {
-        "message": "Le streaming n'est pas encore implémenté",
-        "status": "coming_soon"
-    }
-"""
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            error_msg = f"Erreur streaming: {str(e)}"
+            yield f"data: {json.dumps({'type': 'error', 'value': error_msg})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 # ============================================================================
 # Error Handlers
