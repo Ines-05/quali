@@ -17,6 +17,8 @@ load_dotenv()
 
 # External API Configuration
 QUALIWO_SEARCH_API_URL = "https://apiquali.vercel.app"
+# "https://search-liart-three.vercel.app"
+#
 
 
 @tool

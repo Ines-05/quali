@@ -3,6 +3,7 @@ uvicorn
 langchain
 langchain-openai
 langchain-google-genai
+langchain-mistralai
 langgraph
 openai
 google-generativeai

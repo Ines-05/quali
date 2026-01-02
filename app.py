@@ -168,9 +168,22 @@ async def chat_endpoint(request: ChatRequest) -> ChatResponse:
         
         # Exécuter l'agent
         start_agent = time.time()
+        print(f"🚀 Starting agent execution for session {request.session_id}")
         result = await agent_executor.ainvoke({"messages": messages}, config=config)
         agent_duration = time.time() - start_agent
         print(f"🤖 Agent execution took: {agent_duration:.4f}s")
+
+        # --- DEBUG LOGGING ---
+        print("📊 Agent Result Analysis:")
+        if "messages" in result:
+            for i, msg in enumerate(result["messages"]):
+                print(f"  Message {i} ({type(msg).__name__}):")
+                print(f"    Content: {str(msg.content)[:200]}...")
+                if hasattr(msg, 'tool_calls') and msg.tool_calls:
+                    print(f"    🛠️ Tool Calls: {msg.tool_calls}")
+                if hasattr(msg, 'tool_call_id'):
+                    print(f"    🆔 Tool Call ID: {msg.tool_call_id}")
+        # ---------------------
         
         # Extraire la réponse du dernier message AI
         agent_output = ""
