@@ -197,33 +197,10 @@ async def chat_endpoint(request: ChatRequest) -> ChatResponse:
 
         # --- LOGIQUE DE PARSING JSON ---
         # Le prompt demande à l'agent de répondre en JSON. On tente de l'extraire pour le frontend.
-        try:
-            # Nettoyage des éventuels blocs de code markdown
-            cleaned_output = agent_output.strip()
-            if cleaned_output.startswith("```json"):
-                cleaned_output = cleaned_output[7:].split("```")[0].strip()
-            elif cleaned_output.startswith("```"):
-                cleaned_output = cleaned_output[3:].split("```")[0].strip()
-            
-            # Parser le JSON
-            parsed_json = json.loads(cleaned_output)
-            
-            if isinstance(parsed_json, dict):
-                # Extraire le message propre
-                if "message" in parsed_json:
-                    agent_output = parsed_json["message"]
-                
-                # Extraire l'action UI si présente
-                if "ui_action" in parsed_json and parsed_json["ui_action"] != "NONE":
-                    ui_action_type = parsed_json["ui_action"]
-                
-                # Extraire les données si présentes
-                if "data" in parsed_json and parsed_json["data"]:
-                    ui_data = parsed_json["data"]
-        except Exception as e:
-            # Si ce n'est pas du JSON, on garde l'agent_output tel quel
-            # Cela arrive si l'agent ne suit pas parfaitement le format
-            pass
+        # Note: Le message contient uniquement du texte conversationnel
+        # Les données structurées (JSON, listes de produits, etc.) doivent être
+        # extraites à partir des appels d'outils, pas du message
+        # Voir la section "LOGIQUE DE DÉTECTION PAR OUTILS" ci-dessous
         
         # --- LOGIQUE DE DÉTECTION PAR OUTILS ---
         # On complète/écrase avec les infos issues des appels d'outils réels
