@@ -2,7 +2,7 @@
 FastAPI routes for authentication endpoints
 """
 
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Request
 from .models import (
     PhoneNumberRequest,
     SendOTPResponse,
@@ -112,14 +112,15 @@ async def refresh_token(request: RefreshTokenRequest):
 
 
 @router.post("/logout", status_code=status.HTTP_200_OK)
-async def logout(current_user: dict = Depends(require_auth)):
+async def logout(request: Request, current_user: dict = Depends(require_auth)):
     """
     Logout user and invalidate session
     
-    This endpoint signs out the current user and invalidates their session.
+    This endpoint signs out the current user and invalidates their session in Supabase.
     Requires a valid access token in the Authorization header.
     
     Args:
+        request: FastAPI request object
         current_user: Current authenticated user (from dependency)
         
     Returns:
@@ -129,12 +130,18 @@ async def logout(current_user: dict = Depends(require_auth)):
         HTTPException: If logout fails
     """
     try:
-        # Note: Supabase handles session invalidation internally
+        # Extract access token from Authorization header
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            access_token = auth_header.split(" ")[1]
+            await auth_service.sign_out(access_token)
+            
         return {"message": "Logged out successfully"}
     except Exception as e:
+        # LOGIQUE STRICTE : Si le serveur échoue, on renvoie une erreur 500
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail=f"Failed to invalidate session on Supabase: {str(e)}"
         )
 
 
