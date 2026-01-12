@@ -13,3 +13,6 @@ aiohttp
 httpx
 pymongo
 motor
+supabase
+python-jose[cryptography]
+phonenumbers

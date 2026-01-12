@@ -17,6 +17,9 @@ from services.database import db
 from contextlib import asynccontextmanager
 import json
 
+# Import auth router
+from auth.routes import router as auth_router
+
 load_dotenv()
 
 # ============================================================================
@@ -57,6 +60,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include authentication routes
+app.include_router(auth_router)
 
 # Middleware pour mesurer la latence
 import time
