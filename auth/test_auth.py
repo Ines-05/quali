@@ -30,7 +30,7 @@ async def test_auth_flow():
         try:
             response = await client.post(
                 f"{BASE_URL}/auth/send-otp",
-                json={"phone": phone_number}
+                json={"phone_number": phone_number}
             )
             response.raise_for_status()
             result = response.json()
@@ -50,7 +50,7 @@ async def test_auth_flow():
         try:
             response = await client.post(
                 f"{BASE_URL}/auth/verify-otp",
-                json={"phone": phone_number, "otp": otp}
+                json={"phone_number": phone_number, "otp": otp}
             )
             response.raise_for_status()
             result = response.json()

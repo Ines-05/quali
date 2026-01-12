@@ -45,10 +45,10 @@ async def send_otp(request: PhoneNumberRequest):
         HTTPException: If OTP sending fails
     """
     try:
-        result = await auth_service.send_otp(request.phone)
+        result = await auth_service.send_otp(request.phone_number)
         return SendOTPResponse(
             message=result["message"],
-            phone=result["phone_number"]
+            phone_number=result["phone_number"]
         )
     except Exception as e:
         raise HTTPException(
@@ -75,7 +75,7 @@ async def verify_otp(request: VerifyOTPRequest):
         HTTPException: If OTP verification fails (invalid code, expired, etc.)
     """
     try:
-        result = await auth_service.verify_otp(request.phone, request.otp)
+        result = await auth_service.verify_otp(request.phone_number, request.otp)
         return VerifyOTPResponse(**result)
     except Exception as e:
         raise HTTPException(
