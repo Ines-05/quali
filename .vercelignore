@@ -1,0 +1,28 @@
+# Exclude Python virtual environment
+venv/
+.venv/
+env/
+.env/
+
+# Exclude Javascript dependencies
+node_modules/
+
+# Exclude Frontend project (if deployed separately or not needed for API)
+front/
+
+# Exclude Build artifacts
+.next/
+__pycache__/
+*.pyc
+.vercel/
+
+# Exclude Git and IDE settings
+.git/
+.vscode/
+.idea/
+
+# Exclude documentation and local config
+.env
+.env.local
+README.md
+API_DOCUMENTATION.md
