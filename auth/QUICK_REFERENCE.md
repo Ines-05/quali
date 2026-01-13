@@ -30,11 +30,29 @@ python test_auth.py
 
 ## 📡 API Endpoints
 
-### Send OTP
+### Sign Up
+```bash
+POST /auth/signup
+{
+  "phone": "+1234567890",
+  "password": "your-password"
+}
+```
+
+### Login (Password)
+```bash
+POST /auth/login
+{
+  "phone": "+1234567890",
+  "password": "your-password"
+}
+```
+
+### Send OTP (Passwordless Login / Verification)
 ```bash
 POST /auth/send-otp
 {
-  "phone_number": "+1234567890"
+  "phone": "+1234567890"
 }
 ```
 
@@ -42,10 +60,38 @@ POST /auth/send-otp
 ```bash
 POST /auth/verify-otp
 {
-  "phone_number": "+1234567890",
+  "phone": "+1234567890",
   "otp": "123456"
 }
 ```
+
+### Password Recovery
+1. **Send Recovery OTP**: `POST /auth/password-recovery/send-otp`
+   ```json
+   {"phone": "+1234567890"}
+   ```
+2. **Reset Password**: `POST /auth/password-recovery/reset`
+   ```json
+   {
+     "phone": "+1234567890",
+     "otp": "123456",
+     "new_password": "new-secure-password"
+   }
+   ```
+
+### Phone Number Change
+1. **Initiate**: `POST /auth/phone-change/initiate` (Requires Auth)
+   ```json
+   {"new_phone": "+1234567891"}
+   ```
+2. **Verify**: `POST /auth/phone-change/verify` (Requires Auth)
+   ```json
+   {
+     "new_phone": "+1234567891",
+     "otp": "123456"
+   }
+   ```
+
 
 ### Get User Info
 ```bash

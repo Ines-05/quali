@@ -5,16 +5,22 @@ FastAPI routes for authentication endpoints
 from fastapi import APIRouter, HTTPException, Depends, status, Request
 from .models import (
     PhoneNumberRequest,
+    SignUpRequest,
+    LoginRequest,
     SendOTPResponse,
     VerifyOTPRequest,
     VerifyOTPResponse,
     RefreshTokenRequest,
     RefreshTokenResponse,
     UserResponse,
-    ErrorResponse
+    ErrorResponse,
+    PasswordRecoveryRequest,
+    PasswordResetRequest,
+    PhoneChangeRequest,
+    VerifyPhoneChangeRequest
 )
 from .auth_service import auth_service
-from .middleware import get_current_user, require_auth
+from .middleware import get_current_user, require_auth, security
 
 # Create router
 router = APIRouter(
@@ -27,28 +33,52 @@ router = APIRouter(
 )
 
 
+@router.post("/signup", status_code=status.HTTP_201_CREATED)
+async def signup(request: SignUpRequest):
+    """
+    Sign up a new user with phone and password.
+    Triggers a one-time SMS verification.
+    """
+    try:
+        result = await auth_service.sign_up(
+            request.phone, 
+            request.password, 
+            request.display_name
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.post("/login", response_model=VerifyOTPResponse, status_code=status.HTTP_200_OK)
+async def login(request: LoginRequest):
+    """
+    Login with phone and password.
+    No SMS sent.
+    """
+    try:
+        result = await auth_service.sign_in_with_password(request.phone, request.password)
+        return VerifyOTPResponse(**result)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e)
+        )
+
+
 @router.post("/send-otp", response_model=SendOTPResponse, status_code=status.HTTP_200_OK)
 async def send_otp(request: PhoneNumberRequest):
     """
-    Send OTP code to phone number
-    
-    This endpoint sends a 6-digit OTP code via SMS to the provided phone number.
-    The OTP is valid for a limited time (typically 60 seconds).
-    
-    Args:
-        request: Phone number in E.164 format (e.g., +1234567890)
-        
-    Returns:
-        Success message with phone number
-        
-    Raises:
-        HTTPException: If OTP sending fails
+    Send OTP code to phone number (Passwordless flow)
     """
     try:
-        result = await auth_service.send_otp(request.phone_number)
+        result = await auth_service.send_otp(request.phone)
         return SendOTPResponse(
             message=result["message"],
-            phone_number=result["phone_number"]
+            phone=result["phone_number"]
         )
     except Exception as e:
         raise HTTPException(
@@ -60,24 +90,13 @@ async def send_otp(request: PhoneNumberRequest):
 @router.post("/verify-otp", response_model=VerifyOTPResponse, status_code=status.HTTP_200_OK)
 async def verify_otp(request: VerifyOTPRequest):
     """
-    Verify OTP code and create session
-    
-    This endpoint verifies the OTP code sent to the phone number and creates
-    an authenticated session. Returns access and refresh tokens.
-    
-    Args:
-        request: Phone number and OTP code
-        
-    Returns:
-        Session data with access_token, refresh_token, and user information
-        
-    Raises:
-        HTTPException: If OTP verification fails (invalid code, expired, etc.)
+    Verify OTP code (for both Signup verification and Passwordless login)
     """
     try:
-        result = await auth_service.verify_otp(request.phone_number, request.otp)
+        result = await auth_service.verify_otp(request.phone, request.otp, request.type)
         return VerifyOTPResponse(**result)
     except Exception as e:
+        print(f"DEBUG: Verification failed for {request.phone} with type {request.type}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(e)
@@ -88,18 +107,6 @@ async def verify_otp(request: VerifyOTPRequest):
 async def refresh_token(request: RefreshTokenRequest):
     """
     Refresh access token
-    
-    This endpoint refreshes an expired access token using a valid refresh token.
-    Returns new access and refresh tokens.
-    
-    Args:
-        request: Refresh token
-        
-    Returns:
-        New session data with access_token and refresh_token
-        
-    Raises:
-        HTTPException: If token refresh fails
     """
     try:
         result = await auth_service.refresh_session(request.refresh_token)
@@ -114,23 +121,9 @@ async def refresh_token(request: RefreshTokenRequest):
 @router.post("/logout", status_code=status.HTTP_200_OK)
 async def logout(request: Request, current_user: dict = Depends(require_auth)):
     """
-    Logout user and invalidate session
-    
-    This endpoint signs out the current user and invalidates their session in Supabase.
-    Requires a valid access token in the Authorization header.
-    
-    Args:
-        request: FastAPI request object
-        current_user: Current authenticated user (from dependency)
-        
-    Returns:
-        Success message
-        
-    Raises:
-        HTTPException: If logout fails
+    Logout user and invalidate session in Supabase
     """
     try:
-        # Extract access token from Authorization header
         auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.startswith("Bearer "):
             access_token = auth_header.split(" ")[1]
@@ -138,7 +131,6 @@ async def logout(request: Request, current_user: dict = Depends(require_auth)):
             
         return {"message": "Logged out successfully"}
     except Exception as e:
-        # LOGIQUE STRICTE : Si le serveur échoue, on renvoie une erreur 500
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to invalidate session on Supabase: {str(e)}"
@@ -149,18 +141,6 @@ async def logout(request: Request, current_user: dict = Depends(require_auth)):
 async def get_current_user_info(current_user: dict = Depends(require_auth)):
     """
     Get current authenticated user information
-    
-    This endpoint returns information about the currently authenticated user.
-    Requires a valid access token in the Authorization header.
-    
-    Args:
-        current_user: Current authenticated user (from dependency)
-        
-    Returns:
-        User information (id, phone, email, created_at, etc.)
-        
-    Raises:
-        HTTPException: If user retrieval fails or token is invalid
     """
     try:
         return UserResponse(**current_user)
@@ -169,3 +149,86 @@ async def get_current_user_info(current_user: dict = Depends(require_auth)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+
+
+@router.post("/password-recovery/send-otp", status_code=status.HTTP_200_OK)
+async def send_recovery_otp(request: PasswordRecoveryRequest):
+    """
+    Send OTP for password recovery
+    """
+    try:
+        # Reusing send_otp since it's the same logic for phone-based recovery in Supabase
+        result = await auth_service.send_otp(request.phone)
+        return {"message": "Recovery OTP sent", "phone": request.phone}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.post("/password-recovery/reset", status_code=status.HTTP_200_OK)
+async def reset_password(request: PasswordResetRequest):
+    """
+    Reset password using OTP
+    """
+    try:
+        result = await auth_service.reset_password_after_otp(
+            request.phone, 
+            request.otp, 
+            request.new_password
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.post("/phone-change/initiate", status_code=status.HTTP_200_OK)
+async def initiate_phone_change_route(
+    request: PhoneChangeRequest, 
+    current_user: dict = Depends(require_auth),
+    auth_credentials=Depends(security)
+):
+    """
+    Initiate phone number change
+    """
+    try:
+        result = await auth_service.initiate_phone_change(
+            auth_credentials.credentials, 
+            request.new_phone
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.post("/phone-change/verify", status_code=status.HTTP_200_OK)
+async def verify_phone_change_route(
+    request: VerifyPhoneChangeRequest, 
+    current_user: dict = Depends(require_auth),
+    auth_credentials=Depends(security)
+):
+    """
+    Verify phone number change
+    """
+    try:
+        result = await auth_service.verify_phone_change(
+            auth_credentials.credentials, 
+            request.new_phone, 
+            request.otp
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+
