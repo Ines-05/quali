@@ -55,46 +55,55 @@ class AuthService:
         Register a new user with phone and password
         """
         try:
-            # Metadata is crucial for "attaching" info without complicating auth logic
+            # Prepare metadata
             user_metadata = {}
             if display_name:
                 user_metadata["display_name"] = display_name
                 
-            # Attempt 1: Dictionary style (commonly used in v2+ and wrappers)
             credentials = {
                 "phone": phone,
-                "password": password
+                "password": password,
+                "options": {
+                    "data": user_metadata
+                }
             }
-            if user_metadata:
-                # Modern GoTrue-python uses 'options': {'data': ...}
-                credentials["options"] = {"data": user_metadata}
-                # Some wrappers might prefer 'data' at root
-                credentials["data"] = user_metadata
             
             try:
-                # Try passing as a single dict first
                 response = self.client.auth.sign_up(credentials)
             except Exception as e:
-                # Fallback: Try keyword arguments style (v1 or direct library calls)
-                try:
-                    # In keyword style, 'data' is the common param for metadata
-                    response = self.client.auth.sign_up(
-                        phone=phone,
-                        password=password,
-                        data=user_metadata if user_metadata else None
-                    )
-                except Exception as inner_e:
-                    # If both fail, raise the original error or a clearer one
-                    raise Exception(f"GoTrue sign_up failed with both dict and kwargs. Last error: {str(inner_e)}")
+                # Supabase might raise an exception for duplicates depending on config
+                # We do NOT raise an error here, so the frontend sees a "success" and prompts for validation.
+                # If the user is unverified, this OTP will verify them.
+                # If the user is verified, this OTP will log them in (if type=sms/magiclink).
+                if "already registered" in str(e) or "User already exists" in str(e):
+                    # This means the user already exists, but Supabase still sends an OTP.
+                    # We'll proceed as if it was a successful sign-up, but indicate it's an existing user.
+                    # The frontend should then prompt for OTP verification.
+                    pass # Allow to fall through to the success message, as an OTP is still sent.
+                else:
+                    raise Exception(f"Supabase sign_up failed: {str(e)}")
             
+            # CRITICAL CHECK for "Silent" Existing Users
+            # Supabase behavior:
+            # 1. If user exists & verified: returns user object with empty identities (usually).
+            # 2. If user exists & unverified: returns user object (often with empty identities too, or just resends OTP).
+            
+            # Reliable way is to check if 'identities' is empty (meaning duplication/lookup found)
+            if response.user and not response.user.identities:
+                # STRICT MODE: If Supabase returns a user without identities, it means the user exists (verified or not).
+                # We block this to prevent confusion (like signing up again and thinking you set a new password).
+                # The user must use Login or Forgot Password.
+                raise Exception("User already registered. Please log in or use Password Recovery.")
+
             formatted_user = self._format_user(response.user)
-            # Manual injection for immediate feedback if Supabase hasn't synced it yet
+            
+            # Ensure display_name is in the returned object even if Supabase hasn't synced it yet
             if not formatted_user.get("display_name") and display_name:
                 formatted_user["display_name"] = display_name
                 
             return {
                 "success": True,
-                "message": "User created successfully. Please verify your phone number with the OTP sent.",
+                "message": "User created/found. Please verify your phone number with the OTP sent.",
                 "user": formatted_user
             }
         except Exception as e:
@@ -149,20 +158,19 @@ class AuthService:
         except Exception as e:
             raise Exception(f"Failed to send OTP: {str(e)}")
     
-    async def verify_otp(self, phone_number: str, otp: str, type: str = "sms") -> Dict[str, Any]:
+    async def verify_otp(self, phone_number: str, otp: str, type: str = "sms", password: str = None) -> Dict[str, Any]:
         """
-        Verify OTP code and create session
+        Verify OTP code and create session.
+        Optionally updates the password if provided (Seamless Signup/Reset flow).
         
         Args:
             phone_number: Phone number in E.164 format
             otp: 6-digit OTP code
             type: Verification type ('sms', 'signup', etc.)
+            password: (Optional) New password to set immediately after verification.
             
         Returns:
             Dictionary with session data
-            
-        Raises:
-            Exception: If OTP verification fails
         """
         try:
             response = self.client.auth.verify_otp({
@@ -174,6 +182,16 @@ class AuthService:
             if not response.session:
                 raise Exception("Failed to create session")
             
+            # If a new password was provided (e.g. from a retry signup flow), update it now!
+            if password:
+                try:
+                    # We have a valid session now, so we can update the user
+                    self.client.auth.set_session(response.session.access_token, response.session.refresh_token)
+                    self.client.auth.update_user({"password": password})
+                except Exception as pw_error:
+                    print(f"WARNING: Failed to update password during verify: {pw_error}")
+                    # We don't fail the verification itself, but we might want to log this.
+
             return {
                 "access_token": response.session.access_token,
                 "refresh_token": response.session.refresh_token,

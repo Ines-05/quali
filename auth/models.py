@@ -74,6 +74,7 @@ class VerifyOTPRequest(BaseModel):
     phone: str = Field(..., description="Phone number in E.164 format")
     otp: str = Field(..., description="6-digit OTP code", min_length=6, max_length=6)
     type: str = Field("sms", description="Verification type: 'sms' (login) or 'signup' (confirmation)")
+    password: Optional[str] = Field(None, description="Optional: New password to set upon verification (for seamless signup retry)")
     
     @validator('phone')
     def validate_phone(cls, v):

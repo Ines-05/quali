@@ -51,24 +51,31 @@ async def test_password_auth_flow():
             if "already registered" not in str(e.response.json()):
                 return
             print("! User already exists, proceeding to login test.")
+            result = {} # Prevent UnboundLocalError
 
         # 2. Verify OTP (Only required once after signup)
-        if "User created" in response.text:
+        if "User created" in (result.get("message") or "") or "Please verify" in (result.get("message") or ""):
             otp = input("\nEnter the OTP code received by SMS: ").strip()
-            print(f"\n[2/4] Verifying OTP for account activation...")
+            print(f"\n[2/4] Verifying OTP for account activation (and password sync)...")
             try:
+                # We send the password here to ensure it's synced if the user already existed!
+                verify_payload = {
+                    "phone": phone, 
+                    "otp": otp,
+                    "password": password  # <--- CRITICAL: Send password to rewrite it if user existed
+                }
                 response = await client.post(
                     f"{BASE_URL}/auth/verify-otp",
-                    json={"phone": phone, "otp": otp}
+                    json=verify_payload
                 )
                 response.raise_for_status()
-                print(f"✓ Account verified!")
+                print(f"✓ Account verified and password synced!")
             except httpx.HTTPStatusError as e:
                 print(f"✗ Verification failed: {e.response.json()}")
                 return
 
         # 3. Login with Password (No SMS required)
-        print(f"\n[3/4] Logging in with password (No SMS)...")
+        print(f"\n[3/4] Logging in with password '{password}'...")
         try:
             response = await client.post(
                 f"{BASE_URL}/auth/login",

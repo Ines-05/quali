@@ -90,10 +90,11 @@ async def send_otp(request: PhoneNumberRequest):
 @router.post("/verify-otp", response_model=VerifyOTPResponse, status_code=status.HTTP_200_OK)
 async def verify_otp(request: VerifyOTPRequest):
     """
-    Verify OTP code (for both Signup verification and Passwordless login)
+    Verify OTP code (for both Signup verification and Passwordless login).
+    If password is provided, it updates the user's password once verified.
     """
     try:
-        result = await auth_service.verify_otp(request.phone, request.otp, request.type)
+        result = await auth_service.verify_otp(request.phone, request.otp, request.type, request.password)
         return VerifyOTPResponse(**result)
     except Exception as e:
         print(f"DEBUG: Verification failed for {request.phone} with type {request.type}: {str(e)}")
